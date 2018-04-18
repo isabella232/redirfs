@@ -165,6 +165,9 @@ int rfsctl_write_data(const char *fltname, const char *filename, char *buf,
 	long page_size;
 
 	page_size = sysconf(_SC_PAGESIZE);
+	if (page_size <= 0)
+		return -1;
+
 	fn = rfsctl_alloc_filename(fltname, filename);
 	if (!fn)
 		return -1;
@@ -254,6 +257,9 @@ static int rfsctl_set_filter_paths(struct rfsctl_filter *flt)
 	long page_size;
 
 	page_size = sysconf(_SC_PAGESIZE);
+	if (page_size <= 0)
+		return -1;
+
 	buf = malloc(sizeof(char) * page_size);
 	if (!buf)
 		return -1;
@@ -381,6 +387,7 @@ struct rfsctl_filter **rfsctl_get_filters(void)
 		flts[i] = NULL;
 	}
 
+	closedir(dir);
 	return flts;
 }
 
@@ -422,6 +429,9 @@ int rfsctl_add_path(const char *name, const char *path, int type)
 		t = 'e';
 
 	page_size = sysconf(_SC_PAGESIZE);
+	if (page_size <= 0)
+		return -1;
+
 	buf = malloc(sizeof(char) * page_size);
 	if (!buf)
 		return -1;
@@ -476,6 +486,9 @@ int rfsctl_rem_path_name(const char *name, const char *path)
 	}
 
 	page_size = sysconf(_SC_PAGESIZE);
+	if (page_size <= 0)
+		return -1;
+
 	buf = malloc(sizeof(char) * page_size);
 	if (!buf)
 		return -1;

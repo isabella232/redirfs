@@ -76,6 +76,9 @@ static struct avfltctl_path_cache **avfltctl_get_path_caches(void)
 	long page_size;
 
 	page_size = sysconf(_SC_PAGESIZE);
+	if (page_size <= 0)
+		return NULL;
+
 	buf = malloc(sizeof(char) * page_size);
 	if (!buf)
 		return NULL;
@@ -179,7 +182,6 @@ static struct avfltctl_filter *avfltctl_alloc_filter(struct rfsctl_filter *rflt)
 	flt = malloc(sizeof(struct avfltctl_filter));
 	if (!flt) {
 		free(fn);
-		rfsctl_put_filter(rflt);
 		return NULL;
 	}
 
@@ -341,6 +343,9 @@ static pid_t *avfltctl_get_pids(const char *file)
 	pid_t *pids_new;
 
 	page_size = sysconf(_SC_PAGESIZE);
+	if (page_size <= 0)
+		return NULL;
+
 	buf = malloc(sizeof(char) * page_size);
 	if (!buf)
 		return NULL;

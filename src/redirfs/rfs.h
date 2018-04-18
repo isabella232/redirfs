@@ -595,23 +595,20 @@ static inline int rfs_path_lookup(const char *name, struct nameidata *nd)
 
 #endif
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36))
-
 static inline int rfs_inode_setattr(struct inode *inode, const struct iattr *attr)
 {
-	return inode_setattr(inode, attr);
-}
-
+#if (LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,34))
+    struct iattr attrcopy = *attr;
+    return inode_setattr(inode, &attrcopy);
+#elif (LINUX_VERSION_CODE == KERNEL_VERSION(2,6,35))
+    return inode_setattr(inode, attr);
 #else
-
-static inline int rfs_inode_setattr(struct inode *inode, const struct iattr *attr)
-{
 	setattr_copy(inode, attr);
 	mark_inode_dirty(inode);
 	return 0;
+#endif
 }
 
-#endif
 
 #endif
 

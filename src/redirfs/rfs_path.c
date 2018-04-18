@@ -924,6 +924,9 @@ int rfs_fsrename(struct inode *old_dir, struct dentry *old_dentry,
 	rfs_mutex_lock(&rfs_path_mutex);
 
 	rinode = rfs_inode_find(new_dir);
+	if (!rinode)
+		goto exit;
+
 	rdentry = rfs_dentry_find(old_dentry);
 
 	if (rinode->rinfo->rchain)
