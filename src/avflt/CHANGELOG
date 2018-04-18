@@ -1,3 +1,9 @@
+version Cisco ampavflt 1.1 2015-10-19
+	- ignore close events where the writer count is zero
+	- populate parent process ID and real user ID in events
+	- add compile option to populate path in addition to file descriptor
+	  for file open and close events (off by default)
+
 version Cisco ampavflt 1.0 2015-09-17
 	- renamed module from "avflt" to "ampavflt" to make clear it has been
 	  customized for Cisco AMP.

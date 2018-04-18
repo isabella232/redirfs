@@ -43,7 +43,7 @@
 
 #define AVFLT_NAME		"ampavflt"
 #define AVFLT_DESCRIPTION	"Cisco Anti-Virus Filter for the RedirFS Framework"
-#define AVFLT_VERSION		"1.0"
+#define AVFLT_VERSION		"1.1"
 #define AVFLT_LICENSE		"GPL"
 #define AVFLT_AUTHOR		"Frantisek Hrbata <frantisek.hrbata@redirfs.org>; "\
 				"Modifications by Cisco Systems <www.cisco.com>"
@@ -57,6 +57,12 @@
 
 #define AVFLT_FILE_CLEAN	1
 #define AVFLT_FILE_INFECTED	2
+
+/* For file open and close events, the user-side event handler has access to the
+ * file descriptor which can be used to obtain the filename.  However, the
+ * filename can also be optionally included which adds overhead but can aid
+ * debugging.  */
+//#define AVFLT_INCLUDE_FILENAME_IN_FILE_EVENTS
 
 struct avflt_event {
 	struct list_head req_list;
@@ -78,6 +84,8 @@ struct avflt_event {
 	int cache;
 	pid_t pid;
 	pid_t tgid;
+	pid_t ppid;
+	uid_t ruid;
 };
 
 struct avflt_event *avflt_event_get(struct avflt_event *event);
@@ -100,6 +108,8 @@ void avflt_rem_requests(void);
 struct avflt_event *avflt_get_reply(const char __user *buf, size_t size);
 int avflt_check_init(void);
 void avflt_check_exit(void);
+
+int avflt_get_filename(struct dentry *dentry, char *buf, int size);
 
 struct avflt_trusted {
 	struct list_head list;

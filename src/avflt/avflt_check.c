@@ -54,6 +54,8 @@ static struct avflt_event *avflt_event_alloc(struct file *file, char *path, int 
 	event->fd = -1;
 	event->pid = current->pid;
 	event->tgid = current->tgid;
+	event->ppid = current->parent->pid;
+	event->ruid = current->real_cred->uid;
 	event->path = path;
 
 	/* event->file will be populated when the file is open */
@@ -348,9 +350,9 @@ ssize_t avflt_copy_cmd(char __user *buf, size_t size, struct avflt_event *event)
 	size_t total_size;
 
 	/* Compose the "base" required parameters */
-	base_len = snprintf(base, sizeof(base), "id:%d,type:%d,fd:%d,pid:%d,tgid:%d",
+	base_len = snprintf(base, sizeof(base), "id:%d,type:%d,fd:%d,pid:%d,tgid:%d,ppid:%d,ruid:%d",
 				event->id, event->type, event->fd, event->pid,
-				event->tgid);
+				event->tgid, event->ppid, event->ruid);
 
 	if (base_len < 0)
 		return base_len;

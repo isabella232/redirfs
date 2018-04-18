@@ -121,13 +121,6 @@ static enum redirfs_rv avflt_eval_res(int rv, struct redirfs_args *args)
 static enum redirfs_rv avflt_check_rename(struct dentry *new_dentry, int type, struct redirfs_args *args)
 {
 	char *filename = NULL;
-	redirfs_root root;
-	int root_valid = 0;
-	redirfs_path* paths;
-	int paths_valid = 0;
-	redirfs_path path;
-	struct redirfs_path_info *path_info = NULL;
-	int path_info_valid = 0;
 	struct file *file = NULL;
 	int err = -1;
 	enum redirfs_rv rv = REDIRFS_CONTINUE;
@@ -146,42 +139,15 @@ static enum redirfs_rv avflt_check_rename(struct dentry *new_dentry, int type, s
 		return REDIRFS_CONTINUE;
 	}
 
-	/* Obtain the destination path of this rename event.  Based on code
-	 * example in "mvflt" (function mvflt_rename_in). */
-
-	root = redirfs_get_root_dentry(avflt, new_dentry);
-	if (!root) {
-		printk(KERN_WARNING "avflt: redirfs_get_root_dentry: NULL\n");
-		goto exit;
-	}
-	root_valid = 1;
-
-	paths = redirfs_get_paths_root(avflt, root);
-	path = paths[0];
-	if (!path) {
-		printk(KERN_WARNING "avflt: redirfs_get_paths_root: NULL\n");
-		goto exit;
-	}
-	paths_valid = 1;
-
-	path_info = redirfs_get_path_info(avflt, path);
-	if (IS_ERR(path_info)) {
-		printk(KERN_ERR "avflt: redirfs_get_path_info failed(%ld)\n",
-			PTR_ERR(path_info));
-		goto exit;
-	}
-	path_info_valid = 1;
-
 	filename = kzalloc(sizeof(char) * PAGE_SIZE, GFP_KERNEL);
 	if (!filename) {
 		printk(KERN_WARNING "avflt: filename allocation failed\n");
 		goto exit;
 	}
 
-	err = redirfs_get_filename(path_info->mnt,
-			args->args.i_rename.new_dentry, filename, PAGE_SIZE);
+	err = avflt_get_filename(new_dentry, filename, PAGE_SIZE);
 	if (err) {
-		printk(KERN_ERR "avflt: redirfs_get_filename failed(%d)\n", err);
+		printk(KERN_ERR "avflt: avflt_get_filename failed(%d)\n", err);
 		goto exit;
 	}
 
@@ -203,47 +169,66 @@ static enum redirfs_rv avflt_check_rename(struct dentry *new_dentry, int type, s
 exit:
 	kfree(filename);
 
-	if (path_info_valid) {
-		redirfs_put_path_info(path_info);
-	}
-
-	if (paths_valid) {
-		redirfs_put_paths(paths);
-	}
-
-	if (root_valid) {
-		redirfs_put_root(root);
-	}
-
 	return rv;
 }
 
 static enum redirfs_rv avflt_check_file(struct file *file, int type,
 		struct redirfs_args *args)
 {
+	enum redirfs_rv redirfs_rv = REDIRFS_CONTINUE;
+	char *filename = NULL;
 	int rv;
-	char *path = NULL;
+	int wc;
 
 	if (!avflt_should_check(file))
 		return REDIRFS_CONTINUE;
+
+	/* Ignore close events where the writer count is zero */
+	if (type == AVFLT_EVENT_CLOSE) {
+		wc = atomic_read(&file->f_dentry->d_inode->i_writecount);
+		if (wc == 0) {
+			return REDIRFS_CONTINUE;
+		}
+	}
 
 	rv = avflt_check_cache(file, type);
 	if (rv)
 		return avflt_eval_res(rv, args);
 
-	rv = avflt_process_request(file, path, type);
+#ifdef AVFLT_INCLUDE_FILENAME_IN_FILE_EVENTS
+	/* Attempt to get file name.  Since for file events the file descriptor
+	 * is always provided, populating the path string is only best effort. */
+	filename = kzalloc(sizeof(char) * PAGE_SIZE, GFP_KERNEL);
+	if (!filename) {
+		printk(KERN_WARNING "avflt: filename allocation failed\n");
+	} else {
+		int err = avflt_get_filename(file->f_dentry, filename, PAGE_SIZE);
+		if (err) {
+			printk(KERN_WARNING "avflt: avflt_get_filename failed(%d)\n", err);
+			kfree(filename);
+			filename = NULL;
+		}
+	}
+#endif
+
+	rv = avflt_process_request(file, filename, type);
 	if (rv == -ETIMEDOUT) {
 		int allow_on_timeout = atomic_read(&avflt_allow_on_timeout);
 
 		if (allow_on_timeout) {
-			return REDIRFS_CONTINUE;
+			redirfs_rv = REDIRFS_CONTINUE;
+			goto exit;
 		}
 		args->rv.rv_int = -ETIMEDOUT;
-		return REDIRFS_STOP;
-	} else if (rv)
-		return avflt_eval_res(rv, args);
+		redirfs_rv = REDIRFS_STOP;
+	} else if (rv) {
+		redirfs_rv = avflt_eval_res(rv, args);
+	}
 
-	return REDIRFS_CONTINUE;
+exit:
+	kfree(filename);
+
+	return redirfs_rv;
 }
 
 static enum redirfs_rv avflt_pre_open(redirfs_context context,
@@ -356,3 +341,64 @@ void avflt_rfs_exit(void)
 	redirfs_delete_filter(avflt);
 }
 
+int avflt_get_filename(struct dentry *dentry, char *buf, int size)
+{
+	redirfs_root root;
+	int root_valid = 0;
+	redirfs_path* paths;
+	int paths_valid = 0;
+	redirfs_path path;
+	struct redirfs_path_info *path_info = NULL;
+	int path_info_valid = 0;
+	int err = -1;
+	int ret = -1;
+
+	/* Obtain the destination path of this rename event.  Based on code
+	 * example in "mvflt" (function mvflt_rename_in). */
+
+	root = redirfs_get_root_dentry(avflt, dentry);
+	if (!root) {
+		printk(KERN_WARNING "avflt: redirfs_get_root_dentry: NULL\n");
+		goto exit;
+	}
+	root_valid = 1;
+
+	paths = redirfs_get_paths_root(avflt, root);
+	path = paths[0];
+	if (!path) {
+		printk(KERN_WARNING "avflt: redirfs_get_paths_root: NULL\n");
+		goto exit;
+	}
+	paths_valid = 1;
+
+	path_info = redirfs_get_path_info(avflt, path);
+	if (IS_ERR(path_info)) {
+		printk(KERN_ERR "avflt: redirfs_get_path_info failed(%ld)\n",
+			PTR_ERR(path_info));
+		goto exit;
+	}
+	path_info_valid = 1;
+
+	err = redirfs_get_filename(path_info->mnt, dentry, buf, size);
+	if (err) {
+		printk(KERN_ERR "avflt: redirfs_get_filename failed(%d)\n", err);
+		goto exit;
+	}
+
+	ret = 0;
+
+exit:
+	if (path_info_valid) {
+		redirfs_put_path_info(path_info);
+	}
+
+	if (paths_valid) {
+		redirfs_put_paths(paths);
+	}
+
+	if (root_valid) {
+		redirfs_put_root(root);
+	}
+
+	return ret;
+}

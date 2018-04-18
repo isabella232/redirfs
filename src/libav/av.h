@@ -46,6 +46,8 @@ struct av_event {
 	int fd;
 	pid_t pid;
 	pid_t tgid;
+	pid_t ppid;
+	uid_t ruid;
 	int res;
 	int cache;
 	char *path;

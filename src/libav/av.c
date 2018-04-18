@@ -100,9 +100,9 @@ int av_request(struct av_connection *conn, struct av_event *event, int timeout)
 	}
 
 	/* Read the required parameters */
-	if (sscanf(buf, "id:%d,type:%d,fd:%d,pid:%d,tgid:%d",
+	if (sscanf(buf, "id:%d,type:%d,fd:%d,pid:%d,tgid:%d,ppid:%d,ruid:%d",
 				&event->id, &event->type, &event->fd,
-				&event->pid, &event->tgid) != 5)
+				&event->pid, &event->tgid, &event->ppid, &event->ruid) != 7)
 		return -1;
 
 	/* Read the optional path parameter.  If it exists, copy the path to a
