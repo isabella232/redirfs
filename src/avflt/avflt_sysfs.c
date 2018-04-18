@@ -29,6 +29,7 @@
 
 atomic_t avflt_reply_timeout = ATOMIC_INIT(0);
 atomic_t avflt_allow_on_timeout = ATOMIC_INIT(0);
+atomic_t avflt_timed_out = ATOMIC_INIT(0);
 atomic_t avflt_cache_enabled = ATOMIC_INIT(1);
 
 static ssize_t avflt_timeout_show(redirfs_filter filter,

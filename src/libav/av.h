@@ -12,7 +12,11 @@
 #ifndef __AV_H__
 #define __AV_H__
 
+#include <stdbool.h>
 #include <sys/types.h>
+
+/* Macro to enable compatibility with AmpAVFlt version 1.0 */
+#define AV_ENABLE_AMPAVFLT_V1_0_COMPAT
 
 #define AV_EVENT_OPEN  1
 #define AV_EVENT_CLOSE 2
@@ -48,6 +52,10 @@ struct av_event {
 	pid_t tgid;
 	pid_t ppid;
 	uid_t ruid;
+#ifdef AV_ENABLE_AMPAVFLT_V1_0_COMPAT
+	bool ppid_valid;
+	bool ruid_valid;
+#endif
 	int res;
 	int cache;
 	char *path;

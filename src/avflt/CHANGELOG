@@ -1,3 +1,12 @@
+version Cisco ampavflt 1.2 2016-03-07
+    - change wait for reply timeout behavior so that when timeout occurs, all
+      subsequent requests will be allowed or denied based on the pre-configured
+      "allow on timeout" value until the next read or poll device call.
+      This ensures requests are not perpetually blocked for the full timeout
+      duration in cases where the userland process is not responsive
+      (e.g., stopped by debugger)
+    - ignore close events where the writer count is negative
+
 version Cisco ampavflt 1.1 2015-10-19
 	- ignore close events where the writer count is zero
 	- populate parent process ID and real user ID in events

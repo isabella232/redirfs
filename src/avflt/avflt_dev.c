@@ -31,6 +31,23 @@ static struct class *avflt_class;
 static struct device *avflt_device;
 static dev_t avflt_dev;
 
+
+static void avflt_clear_timed_out(void)
+{
+	int timed_out = atomic_read(&avflt_timed_out);
+
+	atomic_set(&avflt_timed_out, 0);
+
+	/* Since the above read and set pair is not atomic the condition change
+	 * detection is not completely reliable.  However it is only used to
+	 * limit the frequency that the "timeout cleared" message will be printed.
+	 * This is good enough.  */
+
+	if (timed_out) {
+		printk(KERN_WARNING "avflt: wait for reply timeout condition cleared\n");
+	}
+}
+
 static int avflt_dev_open_registered(struct inode *inode, struct file *file)
 {
 	struct avflt_proc *proc;
@@ -54,6 +71,9 @@ static int avflt_dev_open_trusted(struct inode *inode, struct file *file)
 
 static int avflt_dev_open(struct inode *inode, struct file *file)
 {
+	/* Reset timed-out state */
+	avflt_clear_timed_out();
+
 	if (file->f_mode & FMODE_WRITE)
 		return avflt_dev_open_registered(inode, file);
 
@@ -94,6 +114,9 @@ static ssize_t avflt_dev_read(struct file *file, char __user *buf,
 
 	if (!(file->f_mode & FMODE_WRITE))
 		return -EINVAL;
+
+	/* Call to read indicates requests will be serviced */
+	avflt_clear_timed_out();
 
 	event = avflt_get_request();
 	if (!event)
@@ -140,6 +163,9 @@ static ssize_t avflt_dev_write(struct file *file, const char __user *buf,
 static unsigned int avflt_poll(struct file *file, poll_table *wait)
 {
 	unsigned int mask;
+
+	/* Call to poll indicates requests will be serviced */
+	avflt_clear_timed_out();
 
 	poll_wait(file, &avflt_request_available, wait);
 

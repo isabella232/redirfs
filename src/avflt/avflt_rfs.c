@@ -123,6 +123,8 @@ static enum redirfs_rv avflt_check_rename(struct dentry *new_dentry, int type, s
 	char *filename = NULL;
 	struct file *file = NULL;
 	int err = -1;
+	int allow_on_timeout = 0;
+	int timed_out = 0;
 	enum redirfs_rv rv = REDIRFS_CONTINUE;
 
 	/* Check if filter is running and whether process is trusted */
@@ -139,6 +141,29 @@ static enum redirfs_rv avflt_check_rename(struct dentry *new_dentry, int type, s
 		return REDIRFS_CONTINUE;
 	}
 
+	/* Check if the previous request timed out */
+
+	timed_out = atomic_read(&avflt_timed_out);
+	if (timed_out) {
+
+		/* Force any waiting thread to wake up even though the request will
+		 * not be enqueued.  In the event that a thread is ready and waiting
+		 * but the timed-out condition is still set, this wake-up provides
+		 * an opportunity to break from waiting and clear the timed-out
+		 * condition. */
+		wake_up_interruptible(&avflt_request_available);
+
+		/* Proceed with configured behavior */
+		allow_on_timeout = atomic_read(&avflt_allow_on_timeout);
+
+		if (allow_on_timeout) {
+			goto exit;
+		}
+		args->rv.rv_int = -ETIMEDOUT;
+		rv = REDIRFS_STOP;
+		goto exit;
+	}
+
 	filename = kzalloc(sizeof(char) * PAGE_SIZE, GFP_KERNEL);
 	if (!filename) {
 		printk(KERN_WARNING "avflt: filename allocation failed\n");
@@ -153,17 +178,15 @@ static enum redirfs_rv avflt_check_rename(struct dentry *new_dentry, int type, s
 
 	err = avflt_process_request(file, filename, type);
 	if (err == -ETIMEDOUT) {
-		int allow_on_timeout = atomic_read(&avflt_allow_on_timeout);
+		allow_on_timeout = atomic_read(&avflt_allow_on_timeout);
 
 		if (allow_on_timeout) {
 			goto exit;
 		}
 		args->rv.rv_int = -ETIMEDOUT;
 		rv = REDIRFS_STOP;
-		goto exit;
 	} else if (err) {
 		rv = avflt_eval_res(err, args);
-		goto exit;
 	}
 
 exit:
@@ -177,16 +200,18 @@ static enum redirfs_rv avflt_check_file(struct file *file, int type,
 {
 	enum redirfs_rv redirfs_rv = REDIRFS_CONTINUE;
 	char *filename = NULL;
+	int allow_on_timeout;
+	int timed_out;
 	int rv;
 	int wc;
 
 	if (!avflt_should_check(file))
 		return REDIRFS_CONTINUE;
 
-	/* Ignore close events where the writer count is zero */
+	/* Ignore close events where there are no writers */
 	if (type == AVFLT_EVENT_CLOSE) {
 		wc = atomic_read(&file->f_dentry->d_inode->i_writecount);
-		if (wc == 0) {
+		if (wc < 1) {
 			return REDIRFS_CONTINUE;
 		}
 	}
@@ -194,6 +219,30 @@ static enum redirfs_rv avflt_check_file(struct file *file, int type,
 	rv = avflt_check_cache(file, type);
 	if (rv)
 		return avflt_eval_res(rv, args);
+
+
+	/* Check if the previous request timed out */
+
+	timed_out = atomic_read(&avflt_timed_out);
+	if (timed_out) {
+
+		/* Force any waiting thread to wake up even though the request will
+		 * not be enqueued.  In the event that a thread is ready and waiting
+		 * but the timed-out condition is still set, this wake-up provides
+		 * an opportunity to break from waiting and clear the timed-out
+		 * condition. */
+		wake_up_interruptible(&avflt_request_available);
+
+		/* Proceed with configured behavior */
+		allow_on_timeout = atomic_read(&avflt_allow_on_timeout);
+
+		if (allow_on_timeout) {
+			goto exit;
+		}
+		args->rv.rv_int = -ETIMEDOUT;
+		rv = REDIRFS_STOP;
+		goto exit;
+	}
 
 #ifdef AVFLT_INCLUDE_FILENAME_IN_FILE_EVENTS
 	/* Attempt to get file name.  Since for file events the file descriptor
@@ -213,7 +262,7 @@ static enum redirfs_rv avflt_check_file(struct file *file, int type,
 
 	rv = avflt_process_request(file, filename, type);
 	if (rv == -ETIMEDOUT) {
-		int allow_on_timeout = atomic_read(&avflt_allow_on_timeout);
+		allow_on_timeout = atomic_read(&avflt_allow_on_timeout);
 
 		if (allow_on_timeout) {
 			redirfs_rv = REDIRFS_CONTINUE;
@@ -231,6 +280,7 @@ exit:
 	return redirfs_rv;
 }
 
+#ifndef AVFLT_DISABLE_FILE_OPEN_MONITORING
 static enum redirfs_rv avflt_pre_open(redirfs_context context,
 		struct redirfs_args *args)
 {
@@ -238,6 +288,7 @@ static enum redirfs_rv avflt_pre_open(redirfs_context context,
 
 	return avflt_check_file(file, AVFLT_EVENT_OPEN, args);
 }
+#endif
 
 static enum redirfs_rv avflt_post_release(redirfs_context context,
 		struct redirfs_args *args)
@@ -301,7 +352,9 @@ static struct redirfs_filter_info avflt_info = {
 };
 
 static struct redirfs_op_info avflt_op_info[] = {
+#ifndef AVFLT_DISABLE_FILE_OPEN_MONITORING
 	{REDIRFS_REG_FOP_OPEN, avflt_pre_open, NULL},
+#endif
 	{REDIRFS_REG_FOP_RELEASE, avflt_post_release, NULL},
 	{REDIRFS_OP_END, NULL, NULL}
 };

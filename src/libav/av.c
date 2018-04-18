@@ -99,11 +99,35 @@ int av_request(struct av_connection *conn, struct av_event *event, int timeout)
 			return -1;
 	}
 
-	/* Read the required parameters */
-	if (sscanf(buf, "id:%d,type:%d,fd:%d,pid:%d,tgid:%d,ppid:%d,ruid:%d",
-				&event->id, &event->type, &event->fd,
-				&event->pid, &event->tgid, &event->ppid, &event->ruid) != 7)
-		return -1;
+	/* Read the parameters.
+	 *
+	 * ampavflt version 1.0 provides: id, type, pid, fd, pid and tgid
+	 * ampavflt version 1.1 in addition provides: ppid and ruid
+	 */
+	rv = sscanf(buf, "id:%d,type:%d,fd:%d,pid:%d,tgid:%d,ppid:%d,ruid:%d",
+			&event->id, &event->type, &event->fd,
+			&event->pid, &event->tgid, &event->ppid, &event->ruid);
+
+	switch (rv) {
+		case 7:
+			/* All parameters present */
+#ifdef AV_ENABLE_AMPAVFLT_V1_0_COMPAT
+			event->ppid_valid = true;
+			event->ruid_valid = true;
+#endif
+			break;
+#ifdef AV_ENABLE_AMPAVFLT_V1_0_COMPAT
+		case 5:
+			/* ppid and ruid are missing */
+			event->ppid_valid = false;
+			event->ruid_valid = false;
+			event->ppid = -1;
+			event->ruid = 0;
+			break;
+#endif
+		default:
+			return -1;
+	}
 
 	/* Read the optional path parameter.  If it exists, copy the path to a
 	 * heap allocated buffer. */

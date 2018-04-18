@@ -55,7 +55,11 @@ static struct avflt_event *avflt_event_alloc(struct file *file, char *path, int 
 	event->pid = current->pid;
 	event->tgid = current->tgid;
 	event->ppid = current->parent->pid;
-	event->ruid = current->real_cred->uid;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,29))
+	event->ruid = current_uid();
+#else
+	event->ruid = current->uid;
+#endif
 	event->path = path;
 
 	/* event->file will be populated when the file is open */
@@ -209,7 +213,8 @@ static int avflt_wait_for_reply(struct avflt_event *event)
 		return (int)jiffies;
 
 	if (!jiffies) {
-		printk(KERN_WARNING "avflt: wait for reply timeout\n");
+		atomic_set(&avflt_timed_out, 1);
+		printk(KERN_WARNING "avflt: wait for reply timeout condition set\n");
 		return -ETIMEDOUT;
 	}
 

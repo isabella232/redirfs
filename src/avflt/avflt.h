@@ -41,15 +41,7 @@
 #include <linux/slab.h>
 #include <redirfs.h>
 
-#define AVFLT_NAME		"ampavflt"
-#define AVFLT_DESCRIPTION	"Cisco Anti-Virus Filter for the RedirFS Framework"
-#define AVFLT_VERSION		"1.1"
-#define AVFLT_LICENSE		"GPL"
-#define AVFLT_AUTHOR		"Frantisek Hrbata <frantisek.hrbata@redirfs.org>; "\
-				"Modifications by Cisco Systems <www.cisco.com>"
-#define AVFLT_BANNER		AVFLT_DESCRIPTION " " AVFLT_VERSION ". " \
-				"Based on RedirFS AVFlt 0.6 <www.redirfs.org>\n"
-#define AVFLT_PRIORITY		851000000
+#include "avflt_config.h"
 
 #define AVFLT_EVENT_OPEN	1
 #define AVFLT_EVENT_CLOSE	2
@@ -57,12 +49,6 @@
 
 #define AVFLT_FILE_CLEAN	1
 #define AVFLT_FILE_INFECTED	2
-
-/* For file open and close events, the user-side event handler has access to the
- * file descriptor which can be used to obtain the filename.  However, the
- * filename can also be optionally included which adds overhead but can aid
- * debugging.  */
-//#define AVFLT_INCLUDE_FILENAME_IN_FILE_EVENTS
 
 struct avflt_event {
 	struct list_head req_list;
@@ -192,6 +178,7 @@ void avflt_sys_exit(void);
 
 extern atomic_t avflt_reply_timeout;
 extern atomic_t avflt_allow_on_timeout;
+extern atomic_t avflt_timed_out;
 extern atomic_t avflt_cache_enabled;
 extern redirfs_filter avflt;
 extern wait_queue_head_t avflt_request_available;
