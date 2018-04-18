@@ -2,8 +2,12 @@
  * AVFlt: Anti-Virus Filter
  * Written by Frantisek Hrbata <frantisek.hrbata@redirfs.org>
  *
+ * Original work:
  * Copyright 2008 - 2010 Frantisek Hrbata
  * All rights reserved.
+ *
+ * Modified work:
+ * Copyright 2015 Cisco Systems, Inc.
  *
  * This file is part of RedirFS.
  *
@@ -114,10 +118,111 @@ static enum redirfs_rv avflt_eval_res(int rv, struct redirfs_args *args)
 	return REDIRFS_CONTINUE;
 }
 
+static enum redirfs_rv avflt_check_rename(struct dentry *new_dentry, int type, struct redirfs_args *args)
+{
+	char *filename = NULL;
+	redirfs_root root;
+	int root_valid = 0;
+	redirfs_path* paths;
+	int paths_valid = 0;
+	redirfs_path path;
+	struct redirfs_path_info *path_info = NULL;
+	int path_info_valid = 0;
+	struct file *file = NULL;
+	int err = -1;
+	enum redirfs_rv rv = REDIRFS_CONTINUE;
+
+	/* Check if filter is running and whether process is trusted */
+
+	if (avflt_is_stopped()) {
+		return REDIRFS_CONTINUE;
+	}
+
+	if (avflt_proc_allow(current->tgid)) {
+		return REDIRFS_CONTINUE;
+	}
+
+	if (avflt_trusted_allow(current->tgid)) {
+		return REDIRFS_CONTINUE;
+	}
+
+	/* Obtain the destination path of this rename event.  Based on code
+	 * example in "mvflt" (function mvflt_rename_in). */
+
+	root = redirfs_get_root_dentry(avflt, new_dentry);
+	if (!root) {
+		printk(KERN_WARNING "avflt: redirfs_get_root_dentry: NULL\n");
+		goto exit;
+	}
+	root_valid = 1;
+
+	paths = redirfs_get_paths_root(avflt, root);
+	path = paths[0];
+	if (!path) {
+		printk(KERN_WARNING "avflt: redirfs_get_paths_root: NULL\n");
+		goto exit;
+	}
+	paths_valid = 1;
+
+	path_info = redirfs_get_path_info(avflt, path);
+	if (IS_ERR(path_info)) {
+		printk(KERN_ERR "avflt: redirfs_get_path_info failed(%ld)\n",
+			PTR_ERR(path_info));
+		goto exit;
+	}
+	path_info_valid = 1;
+
+	filename = kzalloc(sizeof(char) * PAGE_SIZE, GFP_KERNEL);
+	if (!filename) {
+		printk(KERN_WARNING "avflt: filename allocation failed\n");
+		goto exit;
+	}
+
+	err = redirfs_get_filename(path_info->mnt,
+			args->args.i_rename.new_dentry, filename, PAGE_SIZE);
+	if (err) {
+		printk(KERN_ERR "avflt: redirfs_get_filename failed(%d)\n", err);
+		goto exit;
+	}
+
+	err = avflt_process_request(file, filename, type);
+	if (err == -ETIMEDOUT) {
+		int allow_on_timeout = atomic_read(&avflt_allow_on_timeout);
+
+		if (allow_on_timeout) {
+			goto exit;
+		}
+		args->rv.rv_int = -ETIMEDOUT;
+		rv = REDIRFS_STOP;
+		goto exit;
+	} else if (err) {
+		rv = avflt_eval_res(err, args);
+		goto exit;
+	}
+
+exit:
+	kfree(filename);
+
+	if (path_info_valid) {
+		redirfs_put_path_info(path_info);
+	}
+
+	if (paths_valid) {
+		redirfs_put_paths(paths);
+	}
+
+	if (root_valid) {
+		redirfs_put_root(root);
+	}
+
+	return rv;
+}
+
 static enum redirfs_rv avflt_check_file(struct file *file, int type,
 		struct redirfs_args *args)
 {
 	int rv;
+	char *path = NULL;
 
 	if (!avflt_should_check(file))
 		return REDIRFS_CONTINUE;
@@ -126,8 +231,16 @@ static enum redirfs_rv avflt_check_file(struct file *file, int type,
 	if (rv)
 		return avflt_eval_res(rv, args);
 
-	rv = avflt_process_request(file, type);
-	if (rv)
+	rv = avflt_process_request(file, path, type);
+	if (rv == -ETIMEDOUT) {
+		int allow_on_timeout = atomic_read(&avflt_allow_on_timeout);
+
+		if (allow_on_timeout) {
+			return REDIRFS_CONTINUE;
+		}
+		args->rv.rv_int = -ETIMEDOUT;
+		return REDIRFS_STOP;
+	} else if (rv)
 		return avflt_eval_res(rv, args);
 
 	return REDIRFS_CONTINUE;
@@ -147,6 +260,14 @@ static enum redirfs_rv avflt_post_release(redirfs_context context,
 	struct file *file = args->args.f_release.file;
 
 	return avflt_check_file(file, AVFLT_EVENT_CLOSE, args);
+}
+
+enum redirfs_rv avflt_rename_to(redirfs_context context,
+        struct redirfs_args *args)
+{
+	struct dentry *dentry = args->args.i_rename.new_dentry;
+
+	return avflt_check_rename(dentry, AVFLT_EVENT_RENAME_TO, args);
 }
 
 static int avflt_activate(void)
@@ -182,13 +303,14 @@ redirfs_filter avflt;
 
 static struct redirfs_filter_operations avflt_ops = {
 	.activate = avflt_activate,
-	.add_path = avflt_add_path
+	.add_path = avflt_add_path,
+	.post_rename = avflt_rename_to
 };
 
 static struct redirfs_filter_info avflt_info = {
 	.owner = THIS_MODULE,
-	.name = "avflt",
-	.priority = 850000000,
+	.name = AVFLT_NAME,
+	.priority = AVFLT_PRIORITY,
 	.active = 1,
 	.ops = &avflt_ops
 };

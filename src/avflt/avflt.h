@@ -2,8 +2,12 @@
  * AVFlt: Anti-Virus Filter
  * Written by Frantisek Hrbata <frantisek.hrbata@redirfs.org>
  *
+ * Original work:
  * Copyright 2008 - 2010 Frantisek Hrbata
  * All rights reserved.
+ *
+ * Modified work:
+ * Copyright 2015 Cisco Systems, Inc.
  *
  * This file is part of RedirFS.
  *
@@ -37,10 +41,19 @@
 #include <linux/slab.h>
 #include <redirfs.h>
 
-#define AVFLT_VERSION	"0.6"
+#define AVFLT_NAME		"ampavflt"
+#define AVFLT_DESCRIPTION	"Cisco Anti-Virus Filter for the RedirFS Framework"
+#define AVFLT_VERSION		"1.0"
+#define AVFLT_LICENSE		"GPL"
+#define AVFLT_AUTHOR		"Frantisek Hrbata <frantisek.hrbata@redirfs.org>; "\
+				"Modifications by Cisco Systems <www.cisco.com>"
+#define AVFLT_BANNER		AVFLT_DESCRIPTION " " AVFLT_VERSION ". " \
+				"Based on RedirFS AVFlt 0.6 <www.redirfs.org>\n"
+#define AVFLT_PRIORITY		851000000
 
 #define AVFLT_EVENT_OPEN	1
 #define AVFLT_EVENT_CLOSE	2
+#define AVFLT_EVENT_RENAME_TO	3
 
 #define AVFLT_FILE_CLEAN	1
 #define AVFLT_FILE_INFECTED	2
@@ -58,6 +71,7 @@ struct avflt_event {
 	struct dentry *dentry;
 	unsigned int flags;
 	struct file *file;
+	char *path;
 	int fd;
 	int root_cache_ver;
 	int cache_ver;
@@ -70,7 +84,7 @@ struct avflt_event *avflt_event_get(struct avflt_event *event);
 void avflt_event_put(struct avflt_event *event);
 void avflt_readd_request(struct avflt_event *event);
 struct avflt_event *avflt_get_request(void);
-int avflt_process_request(struct file *file, int type);
+int avflt_process_request(struct file *file, char *path, int type);
 void avflt_event_done(struct avflt_event *event);
 int avflt_get_file(struct avflt_event *event);
 void avflt_put_file(struct avflt_event *event);
@@ -167,6 +181,7 @@ int avflt_sys_init(void);
 void avflt_sys_exit(void);
 
 extern atomic_t avflt_reply_timeout;
+extern atomic_t avflt_allow_on_timeout;
 extern atomic_t avflt_cache_enabled;
 extern redirfs_filter avflt;
 extern wait_queue_head_t avflt_request_available;

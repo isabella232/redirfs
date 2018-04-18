@@ -1,3 +1,9 @@
+version Cisco ampavflt 1.0 2015-09-17
+	- renamed module from "avflt" to "ampavflt" to make clear it has been
+	  customized for Cisco AMP.
+	- add support to allow file operations to proceed when timeout occurs
+	- add support to monitor rename events
+
 version 0.6 2010-05-20
 	* Frantisek Hrbata <frantisek.hrbata@redirfs.org>
 	- reflected changes in 2.6.34 kernel

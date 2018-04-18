@@ -80,7 +80,7 @@ static struct avfltctl_path_cache **avfltctl_get_path_caches(void)
 	if (!buf)
 		return NULL;
 
-	rb = rfsctl_read_data("avflt", "cache_paths", buf, page_size);
+	rb = rfsctl_read_data(AVFLTCTL_DEV_NAME, "cache_paths", buf, page_size);
 	if (rb == -1) {
 		free(buf);
 		return NULL;
@@ -294,6 +294,21 @@ static int avfltctl_set_filter_timeout(struct avfltctl_filter *flt)
 	return 0;
 }
 
+static int avfltctl_set_filter_allow_on_timeout(struct avfltctl_filter *flt)
+{
+	char buf[256];
+	int rv;
+
+	rv = rfsctl_read_data(flt->name, "allow_on_timeout", buf, 256);
+	if (rv == -1)
+		return rv;
+
+	if (sscanf(buf, "%d", &flt->allow_on_timeout) != 1)
+		return -1;
+
+	return 0;
+}
+
 static int avfltctl_set_filter_cache(struct avfltctl_filter *flt)
 {
 	char buf[256];
@@ -330,7 +345,7 @@ static pid_t *avfltctl_get_pids(const char *file)
 	if (!buf)
 		return NULL;
 
-	rb = rfsctl_read_data("avflt", file, buf, page_size);
+	rb = rfsctl_read_data(AVFLTCTL_DEV_NAME, file, buf, page_size);
 	if (rb == -1)
 		goto err_buf;
 
@@ -389,7 +404,7 @@ struct avfltctl_filter *avfltctl_get_filter(void)
 	struct rfsctl_filter *rflt = NULL;
 	int rv;
 
-	rflt = rfsctl_get_filter("avflt");
+	rflt = rfsctl_get_filter(AVFLTCTL_DEV_NAME);
 	if (!rflt)
 		return NULL;
 
@@ -402,6 +417,10 @@ struct avfltctl_filter *avfltctl_get_filter(void)
 		goto error;
 
 	rv = avfltctl_set_filter_timeout(flt);
+	if (rv)
+		goto error;
+
+	rv = avfltctl_set_filter_allow_on_timeout(flt);
 	if (rv)
 		goto error;
 
@@ -435,37 +454,37 @@ void avfltctl_put_filter(struct avfltctl_filter *filter)
 
 int avfltctl_add_path(const char *path, int type)
 {
-	return  rfsctl_add_path("avflt", path, type);
+	return  rfsctl_add_path(AVFLTCTL_DEV_NAME, path, type);
 }
 
 int avfltctl_rem_path(int id)
 {
-	return rfsctl_rem_path("avflt", id);
+	return rfsctl_rem_path(AVFLTCTL_DEV_NAME, id);
 }
 
 int avfltctl_del_paths(void)
 {
-	return rfsctl_del_paths("avflt");
+	return rfsctl_del_paths(AVFLTCTL_DEV_NAME);
 }
 
 int avfltctl_unregister(void)
 {
-	return rfsctl_unregister("avflt");
+	return rfsctl_unregister(AVFLTCTL_DEV_NAME);
 }
 
 int avfltctl_activate(void)
 {
-	return rfsctl_activate("avflt");
+	return rfsctl_activate(AVFLTCTL_DEV_NAME);
 }
 
 int avfltctl_deactivate(void)
 {
-	return rfsctl_deactivate("avflt");
+	return rfsctl_deactivate(AVFLTCTL_DEV_NAME);
 }
 
 int avfltctl_invalidate_cache(void)
 {
-	if (rfsctl_write_data("avflt", "cache", "i", 2) == -1)
+	if (rfsctl_write_data(AVFLTCTL_DEV_NAME, "cache", "i", 2) == -1)
 		return -1;
 
 	return 0;
@@ -473,7 +492,7 @@ int avfltctl_invalidate_cache(void)
 
 int avfltctl_enable_cache(void)
 {
-	if (rfsctl_write_data("avflt", "cache", "a", 2) == -1)
+	if (rfsctl_write_data(AVFLTCTL_DEV_NAME, "cache", "a", 2) == -1)
 		return -1;
 
 	return 0;
@@ -481,7 +500,7 @@ int avfltctl_enable_cache(void)
 
 int avfltctl_disable_cache(void)
 {
-	if (rfsctl_write_data("avflt", "cache", "d", 2) == -1)
+	if (rfsctl_write_data(AVFLTCTL_DEV_NAME, "cache", "d", 2) == -1)
 		return -1;
 
 	return 0;
@@ -498,7 +517,7 @@ int avfltctl_invalidate_path_cache(int id)
 		return -1;
 	}
 
-	if (rfsctl_write_data("avflt", "cache_paths", buf, size + 1) == -1)
+	if (rfsctl_write_data(AVFLTCTL_DEV_NAME, "cache_paths", buf, size + 1) == -1)
 		return -1;
 
 	return 0;
@@ -516,7 +535,7 @@ int avfltctl_enable_path_cache(int id)
 		return -1;
 	}
 
-	if (rfsctl_write_data("avflt", "cache_paths", buf, size + 1) == -1)
+	if (rfsctl_write_data(AVFLTCTL_DEV_NAME, "cache_paths", buf, size + 1) == -1)
 		return -1;
 
 	return 0;
@@ -533,7 +552,7 @@ int avfltctl_disable_path_cache(int id)
 		return -1;
 	}
 
-	if (rfsctl_write_data("avflt", "cache_paths", buf, size + 1) == -1)
+	if (rfsctl_write_data(AVFLTCTL_DEV_NAME, "cache_paths", buf, size + 1) == -1)
 		return -1;
 
 	return 0;
@@ -550,9 +569,25 @@ int avfltctl_set_timeout(int timeout)
 		return -1;
 	}
 
-	if (rfsctl_write_data("avflt", "timeout", buf, size + 1) == -1)
+	if (rfsctl_write_data(AVFLTCTL_DEV_NAME, "timeout", buf, size + 1) == -1)
 		return -1;
 
 	return 0;
 }
 
+int avfltctl_set_allow_on_timeout(int allow_on_timeout)
+{
+	char buf[256];
+	int size;
+
+	size = snprintf(buf, 256, "%d", allow_on_timeout);
+	if (size < 0) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	if (rfsctl_write_data(AVFLTCTL_DEV_NAME, "allow_on_timeout", buf, size + 1) == -1)
+		return -1;
+
+	return 0;
+}

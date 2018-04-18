@@ -2,8 +2,12 @@
  * AVFlt: Anti-Virus Filter
  * Written by Frantisek Hrbata <frantisek.hrbata@redirfs.org>
  *
+ * Original work:
  * Copyright 2008 - 2010 Frantisek Hrbata
  * All rights reserved.
+ *
+ * Modified work:
+ * Copyright 2015 Cisco Systems, Inc.
  *
  * This file is part of RedirFS.
  *
@@ -221,11 +225,11 @@ exit:
 int avflt_data_init(void)
 {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
-	avflt_inode_data_cache = kmem_cache_create("avflt_inode_data_cache",
+	avflt_inode_data_cache = kmem_cache_create(AVFLT_NAME "_inode_data_cache",
 			sizeof(struct avflt_inode_data),
 			0, SLAB_RECLAIM_ACCOUNT, NULL, NULL);
 #else
-	avflt_inode_data_cache = kmem_cache_create("avflt_inode_data_cache",
+	avflt_inode_data_cache = kmem_cache_create(AVFLT_NAME "_inode_data_cache",
 			sizeof(struct avflt_inode_data),
 			0, SLAB_RECLAIM_ACCOUNT, NULL);
 #endif

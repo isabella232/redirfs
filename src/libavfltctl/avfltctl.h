@@ -10,6 +10,8 @@
 
 #include <rfsctl.h>
 
+#define AVFLTCTL_DEV_NAME "ampavflt"
+
 #define AVFLTCTL_PATH_INCLUDE RFSCTL_PATH_INCLUDE
 #define AVFLTCTL_PATH_EXCLUDE RFSCTL_PATH_EXCLUDE
 
@@ -28,6 +30,7 @@ struct avfltctl_filter {
 	int priority;
 	int active;
 	int timeout;
+	int allow_on_timeout;
 	int cache;
 };
 
@@ -46,6 +49,7 @@ int avfltctl_invalidate_path_cache(int id);
 int avfltctl_enable_path_cache(int id);
 int avfltctl_disable_path_cache(int id);
 int avfltctl_set_timeout(int timeout);
+int avfltctl_set_allow_on_timeout(int allow_on_timeout);
 
 #endif
 

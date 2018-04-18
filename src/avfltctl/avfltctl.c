@@ -203,7 +203,7 @@ static int cmd_show(void)
 	printf("priority   : %d\n", flt->priority);
 	printf("status     : %s\n", flt->active ? "active" : "inactive");
 	printf("cache      : %s\n", flt->cache ? "active" : "inactive");
-	printf("timeout    : %d\n", flt->timeout);
+	printf("timeout    : %d (%s)\n", flt->timeout, flt->allow_on_timeout ? "allow" : "deny");
 
 	printf("registered :");
 	for (i = 0; flt->registered[i] != -1; i++) {

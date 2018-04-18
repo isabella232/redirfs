@@ -2,8 +2,12 @@
  * AVFlt: Anti-Virus Filter
  * Written by Frantisek Hrbata <frantisek.hrbata@redirfs.org>
  *
+ * Original work:
  * Copyright 2008 - 2010 Frantisek Hrbata
  * All rights reserved.
+ *
+ * Modified work:
+ * Copyright 2015 Cisco Systems, Inc.
  *
  * This file is part of RedirFS.
  *
@@ -47,8 +51,7 @@ static int __init avflt_init(void)
 	if (rv)
 		goto err_sys;
 
-	printk(KERN_INFO "Anti-Virus Filter Version "
-			AVFLT_VERSION " <www.redirfs.org>\n");
+	printk(KERN_INFO AVFLT_BANNER);
 	return 0;
 
 err_sys:
@@ -74,7 +77,7 @@ static void __exit avflt_exit(void)
 module_init(avflt_init);
 module_exit(avflt_exit);
 
-MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Frantisek Hrbata <frantisek.hrbata@redirfs.org>");
-MODULE_DESCRIPTION("Anti-Virus Filter for the RedirFS Framework");
+MODULE_LICENSE(AVFLT_LICENSE);
+MODULE_AUTHOR(AVFLT_AUTHOR);
+MODULE_DESCRIPTION(AVFLT_DESCRIPTION);
 

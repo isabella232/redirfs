@@ -2,8 +2,12 @@
  * AVFlt: Anti-Virus Filter
  * Written by Frantisek Hrbata <frantisek.hrbata@redirfs.org>
  *
+ * Original work:
  * Copyright 2008 - 2010 Frantisek Hrbata
  * All rights reserved.
+ *
+ * Modified work:
+ * Copyright 2015 Cisco Systems, Inc.
  *
  * This file is part of RedirFS.
  *
@@ -24,6 +28,7 @@
 #include "avflt.h"
 
 atomic_t avflt_reply_timeout = ATOMIC_INIT(0);
+atomic_t avflt_allow_on_timeout = ATOMIC_INIT(0);
 atomic_t avflt_cache_enabled = ATOMIC_INIT(1);
 
 static ssize_t avflt_timeout_show(redirfs_filter filter,
@@ -46,6 +51,26 @@ static ssize_t avflt_timeout_store(redirfs_filter filter,
 		return -EINVAL;
 
 	atomic_set(&avflt_reply_timeout, timeout);
+
+	return count;
+}
+
+static ssize_t avflt_allow_on_timeout_show(redirfs_filter filter,
+        struct redirfs_filter_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d", atomic_read(&avflt_allow_on_timeout));
+}
+
+static ssize_t avflt_allow_on_timeout_store(redirfs_filter filter,
+        struct redirfs_filter_attribute *attr, const char *buf,
+        size_t count)
+{
+	int allow_on_timeout;
+
+	if (sscanf(buf, "%d", &allow_on_timeout) != 1)
+		return -EINVAL;
+
+	atomic_set(&avflt_allow_on_timeout, allow_on_timeout);
 
 	return count;
 }
@@ -203,6 +228,10 @@ static struct redirfs_filter_attribute avflt_timeout_attr =
 	REDIRFS_FILTER_ATTRIBUTE(timeout, 0644, avflt_timeout_show,
 			avflt_timeout_store);
 
+static struct redirfs_filter_attribute avflt_allow_on_timeout_attr =
+	REDIRFS_FILTER_ATTRIBUTE(allow_on_timeout, 0644, avflt_allow_on_timeout_show,
+			avflt_allow_on_timeout_store);
+
 static struct redirfs_filter_attribute avflt_cache_attr = 
 	REDIRFS_FILTER_ATTRIBUTE(cache, 0644, avflt_cache_show,
 			avflt_cache_store);
@@ -224,6 +253,10 @@ int avflt_sys_init(void)
 	rv = redirfs_create_attribute(avflt, &avflt_timeout_attr);
 	if (rv)
 		return rv;
+
+	rv = redirfs_create_attribute(avflt, &avflt_allow_on_timeout_attr);
+	if (rv)
+		goto err_allow_on_timeout;
 
 	rv = redirfs_create_attribute(avflt, &avflt_cache_attr);
 	if (rv)
@@ -250,6 +283,8 @@ err_registered:
 err_pathcache:
 	redirfs_remove_attribute(avflt, &avflt_cache_attr);
 err_cache:
+	redirfs_remove_attribute(avflt, &avflt_allow_on_timeout_attr);
+err_allow_on_timeout:
 	redirfs_remove_attribute(avflt, &avflt_timeout_attr);
 	return rv;
 }
@@ -257,6 +292,7 @@ err_cache:
 void avflt_sys_exit(void)
 {
 	redirfs_remove_attribute(avflt, &avflt_timeout_attr);
+	redirfs_remove_attribute(avflt, &avflt_allow_on_timeout_attr);
 	redirfs_remove_attribute(avflt, &avflt_cache_attr);
 	redirfs_remove_attribute(avflt, &avflt_pathcache_attr);
 	redirfs_remove_attribute(avflt, &avflt_registered_attr);

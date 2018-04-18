@@ -2,8 +2,12 @@
  * AVFlt: Anti-Virus Filter
  * Written by Frantisek Hrbata <frantisek.hrbata@redirfs.org>
  *
+ * Original work:
  * Copyright 2008 - 2010 Frantisek Hrbata
  * All rights reserved.
+ *
+ * Modified work:
+ * Copyright 2015 Cisco Systems, Inc.
  *
  * This file is part of RedirFS.
  *
@@ -107,7 +111,9 @@ static ssize_t avflt_dev_read(struct file *file, char __user *buf,
 	if (rv)
 		goto error;
 
-	avflt_install_fd(event);
+	if (event->fd != -1)
+		avflt_install_fd(event);
+
 	avflt_event_put(event);
 	return len;
 error:
@@ -158,26 +164,26 @@ int avflt_dev_init(void)
 {
 	int major;
 
-	major = register_chrdev(0, "avflt", &avflt_fops);
+	major = register_chrdev(0, AVFLT_NAME, &avflt_fops);
 	if (major < 0)
 		return major;
 
 	avflt_dev = MKDEV(major, 0);
 
-	avflt_class = class_create(THIS_MODULE, "avflt");
+	avflt_class = class_create(THIS_MODULE, AVFLT_NAME);
 	if (IS_ERR(avflt_class)) {
-		unregister_chrdev(major, "avflt");
+		unregister_chrdev(major, AVFLT_NAME);
 		return PTR_ERR(avflt_class);
 	}
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,27)
-	avflt_device = device_create(avflt_class, NULL, avflt_dev, "avflt");
+	avflt_device = device_create(avflt_class, NULL, avflt_dev, AVFLT_NAME);
 #else
-	avflt_device = device_create(avflt_class, NULL, avflt_dev, NULL, "avflt");
+	avflt_device = device_create(avflt_class, NULL, avflt_dev, NULL, AVFLT_NAME);
 #endif
 	if (IS_ERR(avflt_device)) {
 		class_destroy(avflt_class);
-		unregister_chrdev(major, "avflt");
+		unregister_chrdev(major, AVFLT_NAME);
 		return PTR_ERR(avflt_device);
 	}
 
@@ -188,6 +194,6 @@ void avflt_dev_exit(void)
 {
 	device_destroy(avflt_class, avflt_dev);
 	class_destroy(avflt_class);
-	unregister_chrdev(MAJOR(avflt_dev), "avflt");
+	unregister_chrdev(MAJOR(avflt_dev), AVFLT_NAME);
 }
 

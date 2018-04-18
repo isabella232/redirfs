@@ -3,6 +3,10 @@
  * Distributed under the Boost Software License, Version 1.0.
  *    (See accompanying file LICENSE_1_0.txt or copy at
  *          http://www.boost.org/LICENSE_1_0.txt)
+ *
+ * Modified work:
+ * Copyright 2015 Cisco Systems, Inc.
+ *
  */
 
 #include <sys/stat.h>
@@ -11,6 +15,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <errno.h>
+#include <linux/limits.h>
 #include "av.h"
 
 static int av_open_conn(struct av_connection *conn, int flags)
@@ -20,7 +25,7 @@ static int av_open_conn(struct av_connection *conn, int flags)
 		return -1;
 	}
 
-	if ((conn->fd = open("/dev/avflt", flags)) == -1)
+	if ((conn->fd = open(AV_DEV_PATH, flags)) == -1)
 		return -1;
 
 	return 0;
@@ -56,11 +61,14 @@ int av_unregister_trusted(struct av_connection *conn)
 
 int av_request(struct av_connection *conn, struct av_event *event, int timeout)
 {
+	static const char path_delim_str[] = ",path:";
+	const size_t path_delim_len = sizeof(path_delim_str) - 1;
 	struct timeval tv;
 	struct timeval *ptv;
-	char buf[256];
+	char buf[256 + PATH_MAX];
 	fd_set rfds;
 	int rv = 0;
+	char *p = NULL;
 
 	if (!conn || !event || timeout < 0) {
 		errno = EINVAL;
@@ -86,15 +94,30 @@ int av_request(struct av_connection *conn, struct av_event *event, int timeout)
 		if (rv == -1)
 			return -1;
 
-		rv = read(conn->fd, buf, 256);
+		rv = read(conn->fd, buf, sizeof(buf));
 		if (rv == -1)
 			return -1;
 	}
 
+	/* Read the required parameters */
 	if (sscanf(buf, "id:%d,type:%d,fd:%d,pid:%d,tgid:%d",
 				&event->id, &event->type, &event->fd,
 				&event->pid, &event->tgid) != 5)
 		return -1;
+
+	/* Read the optional path parameter.  If it exists, copy the path to a
+	 * heap allocated buffer. */
+	p = strstr(buf, path_delim_str);
+	if (p) {
+		p += path_delim_len;
+		event->path = strdup(p);
+		if (!event->path) {
+			errno = ENOMEM;
+			return -1;
+		}
+	} else {
+		event->path = NULL;
+	}
 
 	event->res = 0;
 	event->cache = AV_CACHE_ENABLE;
@@ -117,8 +140,15 @@ int av_reply(struct av_connection *conn, struct av_event *event)
 	if (write(conn->fd, buf, strlen(buf) + 1) == -1)
 		return -1;
 
-	if (close(event->fd) == -1)
-		return -1;
+	if (event->fd >= 0) {
+		if (close(event->fd) == -1)
+			return -1;
+	}
+
+	event->fd = -1;
+
+	free(event->path);
+	event->path = NULL;
 
 	return 0;
 }

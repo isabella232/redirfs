@@ -2,8 +2,12 @@
  * AVFlt: Anti-Virus Filter
  * Written by Frantisek Hrbata <frantisek.hrbata@redirfs.org>
  *
+ * Original work:
  * Copyright 2008 - 2010 Frantisek Hrbata
  * All rights reserved.
+ *
+ * Modified work:
+ * Copyright 2015 Cisco Systems, Inc.
  *
  * This file is part of RedirFS.
  *
@@ -31,7 +35,7 @@ static struct kmem_cache *avflt_event_cache = NULL;
 atomic_t avflt_cache_ver = ATOMIC_INIT(0);
 atomic_t avflt_event_ids = ATOMIC_INIT(0);
 
-static struct avflt_event *avflt_event_alloc(struct file *file, int type)
+static struct avflt_event *avflt_event_alloc(struct file *file, char *path, int type)
 {
 	struct avflt_inode_data *inode_data;
 	struct avflt_root_data *root_data;
@@ -47,13 +51,29 @@ static struct avflt_event *avflt_event_alloc(struct file *file, int type)
 	atomic_set(&event->count, 1);
 	event->type = type;
 	event->id = -1;
-	event->mnt = mntget(file->f_vfsmnt);
-	event->dentry = dget(file->f_dentry);
-	event->flags = file->f_flags;
 	event->fd = -1;
 	event->pid = current->pid;
 	event->tgid = current->tgid;
-	event->cache = 1;
+	event->path = path;
+
+	/* event->file will be populated when the file is open */
+	event->file = NULL;
+
+	if (!file) {
+		/* Not having file information implies this is an event where file
+		 * will not be open (e.g., rename).  Invalidate the file related
+		 * fields. */
+		event->mnt = NULL;
+		event->dentry = NULL;
+		event->flags = 0;
+		event->cache = 0;
+		return event;
+	} else {
+		event->mnt = mntget(file->f_vfsmnt);
+		event->dentry = dget(file->f_dentry);
+		event->flags = file->f_flags;
+		event->cache = 1;
+	}
 
 	root_data = avflt_get_root_data_inode(file->f_dentry->d_inode);
 	inode_data = avflt_get_inode_data_inode(file->f_dentry->d_inode);
@@ -97,8 +117,13 @@ void avflt_event_put(struct avflt_event *event)
 		return;
 
 	avflt_put_root_data(event->root_data);
-	mntput(event->mnt);
-	dput(event->dentry);
+
+	if (event->mnt)
+		mntput(event->mnt);
+
+	if (event->dentry)
+		dput(event->dentry);
+
 	kmem_cache_free(avflt_event_cache, event);
 }
 
@@ -225,12 +250,12 @@ static void avflt_update_cache(struct avflt_event *event)
 	avflt_put_inode_data(inode_data);
 }
 
-int avflt_process_request(struct file *file, int type)
+int avflt_process_request(struct file *file, char *path, int type)
 {
 	struct avflt_event *event;
 	int rv = 0;
 
-	event = avflt_event_alloc(file, type);
+	event = avflt_event_alloc(file, path, type);
 	if (IS_ERR(event))
 		return PTR_ERR(event);
 
@@ -241,7 +266,11 @@ int avflt_process_request(struct file *file, int type)
 	if (rv)
 		goto exit;
 
-	avflt_update_cache(event);
+	if ((event->type == AVFLT_EVENT_OPEN) ||
+		(event->type == AVFLT_EVENT_CLOSE)) {
+		avflt_update_cache(event);
+	}
+
 	rv = event->result;
 exit:
 	avflt_rem_request(event);
@@ -259,6 +288,13 @@ int avflt_get_file(struct avflt_event *event)
 	struct file *file;
 	int flags;
 	int fd;
+
+	if (!event->dentry) {
+		/* Without a dentry a file will not be open.  Nothing to do. */
+		event->file = NULL;
+		event->fd = -1;
+		return 0;
+	}
 
 	fd = get_unused_fd();
 	if (fd < 0)
@@ -303,24 +339,58 @@ void avflt_install_fd(struct avflt_event *event)
 
 ssize_t avflt_copy_cmd(char __user *buf, size_t size, struct avflt_event *event)
 {
-	char cmd[256];
-	int len;
+	static const char path_delim_str[] = ",path:";
+	const size_t path_delim_len = sizeof(path_delim_str) - 1;
+	char base[256];
+	int base_len;
+	size_t path_len;
+	size_t total_len;
+	size_t total_size;
 
-	len = snprintf(cmd, 256, "id:%d,type:%d,fd:%d,pid:%d,tgid:%d",
-			event->id, event->type, event->fd, event->pid,
-			event->tgid);
-	if (len < 0)
-		return len;
+	/* Compose the "base" required parameters */
+	base_len = snprintf(base, sizeof(base), "id:%d,type:%d,fd:%d,pid:%d,tgid:%d",
+				event->id, event->type, event->fd, event->pid,
+				event->tgid);
 
-	len++;
+	if (base_len < 0)
+		return base_len;
 
-	if (len > size)
+	if (base_len >= size)
 		return -EINVAL;
 
-	if (copy_to_user(buf, cmd, len)) 
-		return -EFAULT;
+	/* Append the path string if it is available */
+	if (event->path) {
+		path_len = strlen(event->path);
+		total_len = base_len + path_delim_len + path_len;
+	} else {
+		total_len = base_len;
+	}
 
-	return len;
+	if (total_len >= size)
+		return -EINVAL;
+
+	total_size = total_len + 1;
+
+	/* Copy output to user buffer */
+	if (event->path) {
+		if (copy_to_user(buf, base, base_len))
+			return -EFAULT;
+
+		buf += base_len;
+
+		if (copy_to_user(buf, path_delim_str, path_delim_len))
+			return -EFAULT;
+
+		buf += path_delim_len;
+
+		if (copy_to_user(buf, event->path, path_len + 1))
+			return -EFAULT;
+	} else {
+		if (copy_to_user(buf, base, total_size))
+			return -EFAULT;
+	}
+
+	return total_size;
 }
 
 int avflt_add_reply(struct avflt_event *event)
@@ -486,11 +556,11 @@ void avflt_invalidate_cache(void)
 int avflt_check_init(void)
 {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,22)
-	avflt_event_cache = kmem_cache_create("avflt_event_cache",
+	avflt_event_cache = kmem_cache_create(AVFLT_NAME "_event_cache",
 			sizeof(struct avflt_event),
 			0, SLAB_RECLAIM_ACCOUNT, NULL, NULL);
 #else
-	avflt_event_cache = kmem_cache_create("avflt_event_cache",
+	avflt_event_cache = kmem_cache_create(AVFLT_NAME "_event_cache",
 			sizeof(struct avflt_event),
 			0, SLAB_RECLAIM_ACCOUNT, NULL);
 #endif
