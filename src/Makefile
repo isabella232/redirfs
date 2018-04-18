@@ -103,5 +103,8 @@ install: libs_install utils_install modules_install cscope_clean
 
 uninstall: libs_uninstall utils_uninstall modules_uninstall cscope_clean
 
+# Needed for Check unit test framework
+check:
+
 endif
 
