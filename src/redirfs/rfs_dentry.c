@@ -63,6 +63,8 @@ struct rfs_dentry *rfs_dentry_get(struct rfs_dentry *rdentry)
 
 void rfs_dentry_put(struct rfs_dentry *rdentry)
 {
+	struct rfs_inode *rinode;
+
 	if (!rdentry || IS_ERR(rdentry))
 		return;
 
@@ -70,7 +72,11 @@ void rfs_dentry_put(struct rfs_dentry *rdentry)
 	if (!atomic_dec_and_test(&rdentry->count))
 		return;
 
-	rfs_inode_put(rdentry->rinode);
+	spin_lock(&rdentry->lock);
+	rinode = rdentry->rinode;
+	rdentry->rinode = NULL;
+	spin_unlock(&rdentry->lock);
+	rfs_inode_put(rinode);
 	rfs_info_put(rdentry->rinfo);
 
 	rfs_data_remove(&rdentry->data);
@@ -163,13 +169,18 @@ int rfs_dentry_add_rinode(struct rfs_dentry *rdentry, struct rfs_info *rinfo)
 
 void rfs_dentry_rem_rinode(struct rfs_dentry *rdentry)
 {
-	if (!rdentry->rinode)
+	struct rfs_inode *rinode;
+
+	spin_lock(&rdentry->lock);
+	rinode = rdentry->rinode;
+	rdentry->rinode = NULL;
+	spin_unlock(&rdentry->lock);
+	if (!rinode)
 		return;
 
-	rfs_inode_rem_rdentry(rdentry->rinode, rdentry);
-	rfs_inode_del(rdentry->rinode);
-	rfs_inode_put(rdentry->rinode);
-	rdentry->rinode = NULL;
+	rfs_inode_rem_rdentry(rinode, rdentry);
+	rfs_inode_del(rinode);
+	rfs_inode_put(rinode);
 }
 
 struct rfs_info *rfs_dentry_get_rinfo(struct rfs_dentry *rdentry)
