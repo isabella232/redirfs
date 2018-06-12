@@ -1,3 +1,9 @@
+version 1.0 2018-06-12
+	* Craig Davison <crdaviso@cisco.com>
+	- Address redirfs kernel panic
+		- Adds locking so rfs_inode_put is not called more than once on a given
+		  rdentry->rinode.
+
 version 0.11 experimental 2011-09-05
 	* Frantisek Hrbata <frantisek.hrbata@redirfs.org>
 	- added pre_rename and post_rename callback to redirfs_filter_operations
