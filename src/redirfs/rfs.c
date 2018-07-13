@@ -103,7 +103,7 @@ static int __init rfs_init(void)
 		goto err_sysfs;
 
 	printk(KERN_INFO "Redirecting File System Framework Version "
-			REDIRFS_VERSION " <www.redirfs.org>\n");
+			REDIRFS_VERSION " <https://github.com/cisco/redirfs>\n");
 
 	return 0;
 
@@ -121,7 +121,7 @@ err_dentry_cache:
 module_init(rfs_init);
 
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Frantisek Hrbata <frantisek.hrbata@redirfs.org>");
+MODULE_AUTHOR("Frantisek Hrbata <frantisek.hrbata@redirfs.org>; Modifications by Cisco Systems <www.cisco.com>");
 MODULE_DESCRIPTION("Redirecting File System Framework Version "
-		REDIRFS_VERSION " <www.redirfs.org>");
+		REDIRFS_VERSION " <https://github.com/cisco/redirfs>");
 
