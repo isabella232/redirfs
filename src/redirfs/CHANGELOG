@@ -1,3 +1,13 @@
+version 1.0.1 2019-01-30
+	* Craig Davison <crdaviso@cisco.com>
+	- If RFS_IGNORE_INODE_MODE is defined, do not create rinodes for dentries
+	  for which RFS_IGNORE_INODE_MODE(dentry->d_inode->i_mode) is nonzero. This
+	  prevents the creation of rfiles when files of a certain mode are open.
+	- In rfs_dentry_rem_data, BUG() when an rfile is associated with a file that
+	  itself is not associated with that rfile. This allows early detection of,
+	  for example, a situation where the file was released but rfs_release was
+	  not called.
+
 version 1.0 2018-06-12
 	* Craig Davison <crdaviso@cisco.com>
 	- Address redirfs kernel panic

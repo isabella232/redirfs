@@ -140,6 +140,13 @@ int rfs_dentry_add_rinode(struct rfs_dentry *rdentry, struct rfs_info *rinfo)
 	if (!rdentry->dentry->d_inode)
 		return 0;
 
+#ifdef RFS_IGNORE_INODE_MODE
+	/* Filter out unwanted modes. */
+	if (RFS_IGNORE_INODE_MODE(rdentry->dentry->d_inode->i_mode)) {
+		return 0;
+	}
+#endif
+
 	spin_lock(&rdentry->lock);
 	if (rdentry->rinode) {
 		spin_unlock(&rdentry->lock);
@@ -605,6 +612,13 @@ void rfs_dentry_rem_data(struct dentry *dentry, struct rfs_flt *rflt)
 	spin_lock(&rdentry->lock);
 
 	list_for_each_entry(rfile, &rdentry->rfiles, rdentry_list) {
+		/* If container_of(rfile->file->f_op, struct rfs_file, op_new) != rfile,
+		 * the file is no longer associated with this rfile. Something is
+		 * seriously wrong - perhaps the file was released but rfs_release
+		 * was not called? */
+		BUG_ON(rfile->file &&
+		       rfile->file->f_op &&
+		       container_of(rfile->file->f_op, struct rfs_file, op_new) != rfile);
 		data = redirfs_detach_data_file(rflt, rfile->file);
 		if (data && data->detach)
 			data->detach(data);
