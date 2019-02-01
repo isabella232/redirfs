@@ -142,6 +142,7 @@ int rfs_dentry_add_rinode(struct rfs_dentry *rdentry, struct rfs_info *rinfo)
 
 #ifdef RFS_IGNORE_INODE_MODE
 	/* Filter out unwanted modes. */
+#	pragma message "Note: RFS_IGNORE_INODE_MODE was set"
 	if (RFS_IGNORE_INODE_MODE(rdentry->dentry->d_inode->i_mode)) {
 		return 0;
 	}
