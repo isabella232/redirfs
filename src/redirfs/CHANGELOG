@@ -1,3 +1,21 @@
+version 1.0.2 2019-02-08
+	* Craig Davison <crdaviso@cisco.com>
+	- Fix several race conditions that could lead to a kernel panic
+		- If rfs_inode_find and rfs_inode_del are called simultaneously,
+		  rfs_inode_find would see inode->i_op->rename==rfs_rename, but the
+		  associated rinode->count==0, which leads to a BUG() in rfs_inode_get.
+		- If rfs_inode_del decreases rinode->nlink from 1 to 0, rinode->count is
+		  decreased. However, if rfs_inode_add is called simultaneously, it will
+		  see that the inode is already associated with a rinode and increase
+		  rinode->nlink but not rinode->count. Later this leads to
+		  rinode->count==0 and a BUG() in rfs_inode_get or rfs_inode_put.
+		- rfs_inode_add sets inode->i_fop before setting inode->i_op. This
+		  could lead to rfs_open being called for that inode before
+		  inode->i_op is set. rfs_inode_find would return NULL in this
+		  situation, resulting in a NULL pointer dereference in rfs_open.
+		- The solution is to lock inode->i_lock in more places to ensure
+		  consistency between rinode->count, rinode->nlink and inode->i_op.
+
 version 1.0.1 2019-01-30
 	* Craig Davison <crdaviso@cisco.com>
 	- If RFS_IGNORE_INODE_MODE is defined, do not create rinodes for dentries

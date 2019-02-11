@@ -304,11 +304,6 @@ struct rfs_inode {
 	int rdentries_nr; /* mutex */
 };
 
-#define rfs_inode_find(inode) \
-	(inode && inode->i_op && inode->i_op->rename == rfs_rename ? \
-	 rfs_inode_get(container_of(inode->i_op, struct rfs_inode, op_new)) : \
-	 NULL)
-
 int rfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 		struct inode *new_dir, struct dentry *new_dentry);
 struct rfs_inode *rfs_inode_get(struct rfs_inode *rinode);
@@ -324,6 +319,25 @@ int rfs_inode_set_rinfo(struct rfs_inode *rinode);
 void rfs_inode_set_ops(struct rfs_inode *rinode);
 int rfs_inode_cache_create(void);
 void rfs_inode_cache_destroy(void);
+
+
+#define rfs_inode_find_locked(inode) \
+	(inode && inode->i_op && inode->i_op->rename == rfs_rename ? \
+	 rfs_inode_get(container_of(inode->i_op, struct rfs_inode, op_new)) : \
+	 NULL)
+
+static inline struct rfs_inode *rfs_inode_find(struct inode *inode)
+{
+	struct rfs_inode *rinode = NULL;
+	if (inode) {
+		spin_lock(&inode->i_lock);
+		/* Hold i_lock so rinode->count, rinode->nlink and inode->i_op are
+		 * consistent */
+		rinode = rfs_inode_find_locked(inode);
+		spin_unlock(&inode->i_lock);
+	}
+	return rinode;
+}
 
 struct rfs_file {
 	struct list_head rdentry_list;

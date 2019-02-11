@@ -35,20 +35,11 @@ static struct rfs_inode *rfs_inode_alloc(struct inode *inode)
 
 	INIT_LIST_HEAD(&rinode->rdentries);
 	INIT_LIST_HEAD(&rinode->data);
-	rinode->inode = inode;
-	rinode->op_old = inode->i_op;
-	rinode->fop_old = inode->i_fop;
 	spin_lock_init(&rinode->lock);
 	rfs_mutex_init(&rinode->mutex);
 	atomic_set(&rinode->count, 1);
 	atomic_set(&rinode->nlink, 1);
 	rinode->rdentries_nr = 0;
-
-	if (inode->i_op)
-		memcpy(&rinode->op_new, inode->i_op,
-				sizeof(struct inode_operations));
-
-	rinode->op_new.rename = rfs_rename;
 
 	return rinode;
 }
@@ -92,8 +83,17 @@ struct rfs_inode *rfs_inode_add(struct inode *inode, struct rfs_info *rinfo)
 
 	spin_lock(&inode->i_lock);
 
-	ri = rfs_inode_find(inode);
+	ri = rfs_inode_find_locked(inode);
 	if (!ri) {
+		ri_new->inode = inode;
+		ri_new->op_old = inode->i_op;
+		ri_new->fop_old = inode->i_fop;
+		if (inode->i_op)
+			memcpy(&ri_new->op_new, inode->i_op,
+					sizeof(struct inode_operations));
+
+		ri_new->op_new.rename = rfs_rename;
+
 		ri_new->rinfo = rfs_info_get(rinfo);
 		if (!S_ISSOCK(inode->i_mode))
 			inode->i_fop = &rfs_file_ops;
@@ -113,13 +113,20 @@ struct rfs_inode *rfs_inode_add(struct inode *inode, struct rfs_info *rinfo)
 
 void rfs_inode_del(struct rfs_inode *rinode)
 {
-	if (!atomic_dec_and_test(&rinode->nlink))
-		return;
+	rfs_inode_get(rinode);
 
-	if (!S_ISSOCK(rinode->inode->i_mode))
-		rinode->inode->i_fop = rinode->fop_old;
+	spin_lock(&rinode->inode->i_lock);
+	/* Hold i_lock so rinode->count, rinode->nlink and inode->i_op are
+	 * consistent */
+	if (atomic_dec_and_test(&rinode->nlink)) {
+		if (!S_ISSOCK(rinode->inode->i_mode))
+			rinode->inode->i_fop = rinode->fop_old;
 
-	rinode->inode->i_op = rinode->op_old;
+		rinode->inode->i_op = rinode->op_old;
+		rfs_inode_put(rinode);
+	}
+	spin_unlock(&rinode->inode->i_lock);
+
 	rfs_inode_put(rinode);
 }
 
