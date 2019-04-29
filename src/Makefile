@@ -1,9 +1,11 @@
 ifneq ($(KERNELRELEASE),)
-
-# kbuild part of makefile
-include Kbuild
-
+	# kbuild part of makefile
+	include Kbuild
 else
+
+ifdef KERNEL_BUILD_USE_SYSTEM_PATH
+	export PATH := $(getconf PATH):/usr/bin:/bin
+endif
 
 default: all
 
