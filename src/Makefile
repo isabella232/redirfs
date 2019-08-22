@@ -14,7 +14,8 @@ BLD_DIR ?= $(PWD)/build
 # linux kernel module targets
 
 MDIR := $(BLD_DIR)/modules/
-KDIR ?= /lib/modules/`uname -r`/build
+TARGET_KERNEL_VERSION ?= $(shell uname -r)
+KDIR ?= /lib/modules/$(TARGET_KERNEL_VERSION)/build
 
 # module include directories
 
