@@ -54,7 +54,7 @@ static struct avflt_event *avflt_event_alloc(struct file *file, char *path, int 
 	event->fd = -1;
 	event->pid = current->pid;
 	event->tgid = current->tgid;
-	event->ppid = current->parent->pid;
+	event->ppid = current->parent->tgid;
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,29))
 	event->ruid = current_uid();
 #else

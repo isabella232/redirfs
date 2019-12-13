@@ -1,3 +1,6 @@
+version Cisco ampavflt 1.3 2019-12-12
+    - ppid in events is now set to the parent task's tgid
+
 version Cisco ampavflt 1.2 2016-03-07
     - change wait for reply timeout behavior so that when timeout occurs, all
       subsequent requests will be allowed or denied based on the pre-configured
