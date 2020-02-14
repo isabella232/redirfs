@@ -89,10 +89,14 @@ static struct rfs_file *rfs_file_add(struct file *file)
 		return rfile;
 
 	rfile->rdentry = rfs_dentry_find(file->f_dentry);
-	rfs_dentry_add_rfile(rfile->rdentry, rfile);
 	fops_put(file->f_op);
 	file->f_op = &rfile->op_new;
 	rfs_file_get(rfile);
+	/* Once the rfile is in the rdentry's list, rfs_dentry_rem_rdata will
+	 * require that file->f_op is set to rfile->op_new. Therefore, file->f_op
+	 * must be set before the call to rfs_dentry_add_rfile.
+	 */
+	rfs_dentry_add_rfile(rfile->rdentry, rfile);
 	spin_lock(&rfile->rdentry->lock);
 	rfs_file_set_ops(rfile);
 	spin_unlock(&rfile->rdentry->lock);
@@ -333,6 +337,8 @@ void rfs_file_set_ops(struct rfs_file *rfile)
 {
 	umode_t mode;
 
+	rfile->op_new.release = rfs_release;
+
 	if (!rfile->rdentry->rinode)
 		return;
 
@@ -355,7 +361,5 @@ void rfs_file_set_ops(struct rfs_file *rfile)
 
 	else if (S_ISFIFO(mode))
 		rfs_file_set_ops_fifo(rfile);
-
-	rfile->op_new.release = rfs_release;
 }
 

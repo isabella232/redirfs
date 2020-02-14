@@ -1,3 +1,10 @@
+version 1.0.3 2020-02-12
+	* Craig Davison <crdaviso@cisco.com>
+	- Fix an issue that could lead to a kernel panic. An rfile could be created
+	  without setting its underlying file's release operation to rfs_release,
+	  leading to the rfile outliving the file, and on rdentry cleanup, a BUG in
+	  rfs_dentry.c:622 could occur.
+
 version 1.0.2 2019-02-08
 	* Craig Davison <crdaviso@cisco.com>
 	- Fix several race conditions that could lead to a kernel panic
