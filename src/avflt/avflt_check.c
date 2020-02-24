@@ -458,7 +458,6 @@ int avflt_is_stopped(void)
 
 void avflt_rem_requests(void)
 {
-	LIST_HEAD(list);
 	struct avflt_event *event;
 	struct avflt_event *tmp;
 
@@ -470,17 +469,20 @@ void avflt_rem_requests(void)
 
 	}
 
+	/* Previously, this code moved each event in avflt_request_list to a
+	 * temporary list, and then, with avflt_request_lock unlocked, called
+	 * avflt_event_put on each event in the temporary list. This created a race
+	 * condition, because then avflt_rem_request did not properly ensure that
+	 * the event was not in avflt_request_list. avflt_rem_request only checks if
+	 * event->req_list is not empty, which would have been true whether the
+	 * event was in avflt_request_list, or in the temporary list. */
 	list_for_each_entry_safe(event, tmp, &avflt_request_list, req_list) {
-		list_move_tail(&event->req_list, &list);
+		list_del_init(&event->req_list);
 		avflt_event_done(event);
+		avflt_event_put(event);
 	}
 
 	spin_unlock(&avflt_request_lock);
-
-	list_for_each_entry_safe(event, tmp, &list, req_list) {
-		list_del_init(&event->req_list);
-		avflt_event_put(event);
-	}
 }
 
 struct avflt_event *avflt_get_reply(const char __user *buf, size_t size)

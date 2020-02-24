@@ -9,7 +9,7 @@
 #define AVFLT_NAME		"ampavflt"
 #define AVFLT_DESCRIPTION	"Cisco Anti-Virus Filter "\
 				"for the RedirFS Framework"
-#define AVFLT_VERSION		"1.3"
+#define AVFLT_VERSION		"1.4"
 #define AVFLT_LICENSE		"GPL"
 #define AVFLT_AUTHOR		"Frantisek Hrbata "\
 				"<frantisek.hrbata@redirfs.org>; "\
