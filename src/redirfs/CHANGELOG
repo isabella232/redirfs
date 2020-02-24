@@ -1,3 +1,7 @@
+version 1.0.4 2020-02-19
+	* Craig Davison <crdaviso@cisco.com>
+	- Fix performance issues in rfs_readdir
+
 version 1.0.3 2020-02-12
 	* Craig Davison <crdaviso@cisco.com>
 	- Fix an issue that could lead to a kernel panic. An rfile could be created

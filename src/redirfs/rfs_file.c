@@ -240,12 +240,10 @@ static int rfs_release(struct inode *inode, struct file *file)
 
 static int rfs_readdir(struct file *file, void *dirent, filldir_t filldir)
 {
-	LIST_HEAD(sibs);
-	struct rfs_dcache_entry *sib;
 	struct rfs_file *rfile;
 	struct rfs_info *rinfo;
 	struct rfs_context rcont;
-	struct rfs_dentry *rdentry;
+	struct dentry *dentry;
 	struct redirfs_args rargs;
 
 	rfile = rfs_file_find(file);
@@ -275,34 +273,34 @@ static int rfs_readdir(struct file *file, void *dirent, filldir_t filldir)
 	if (rargs.rv.rv_int)
 		goto exit;
 
-	if (rfs_dcache_get_subs(file->f_dentry, &sibs)) {
-		BUG();
-		goto exit;
-	}
+	/* This code originally used rfs_dcache_get_subs, which makes a copy.
+	 * Calling that function gets expensive as the number of cached dentries for
+	 * this dir grows, so we now avoid it. */
+	rfs_dcache_lock(file->f_dentry);
+	rfs_for_each_d_child(dentry, &file->f_dentry->d_subdirs) {
 
-	list_for_each_entry(sib, &sibs, list) {
-		rdentry = rfs_dentry_find(sib->dentry);
-		if (rdentry) {
-			rfs_dentry_put(rdentry);
+		if (dentry->d_op && dentry->d_op->d_iput == rfs_d_iput) {
+			/* rdentry already exists */
 			continue;
 		}
 
 		if (!rinfo->rops) {
-			if (!sib->dentry->d_inode)
+			if (!dentry->d_inode)
 				continue;
 
-			if (!S_ISDIR(sib->dentry->d_inode->i_mode))
+			if (!S_ISDIR(dentry->d_inode->i_mode))
 				continue;
 		}
 
-		if (rfs_dcache_rdentry_add(sib->dentry, rinfo)) {
+		if (rfs_dcache_rdentry_add(dentry, rinfo)) {
 			BUG();
+			rfs_dcache_unlock(file->f_dentry);
 			goto exit;
 		}
 	}
+	rfs_dcache_unlock(file->f_dentry);
 
 exit:
-	rfs_dcache_entry_free_list(&sibs);
 	rfs_file_put(rfile);
 	rfs_info_put(rinfo);
 	return rargs.rv.rv_int;
@@ -337,6 +335,8 @@ void rfs_file_set_ops(struct rfs_file *rfile)
 {
 	umode_t mode;
 
+	/* Set op_new.release so the rfile is always cleaned up when the file is
+	 * released. */
 	rfile->op_new.release = rfs_release;
 
 	if (!rfile->rdentry->rinode)
