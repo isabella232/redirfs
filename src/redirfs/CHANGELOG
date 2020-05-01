@@ -1,3 +1,7 @@
+version 1.0.5 2020-04-29
+	* Craig Davison <crdaviso@cisco.com>
+	- Amend rfs_readdir performance fix as it was causing a deadlock
+
 version 1.0.4 2020-02-19
 	* Craig Davison <crdaviso@cisco.com>
 	- Fix performance issues in rfs_readdir

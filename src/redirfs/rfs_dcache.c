@@ -90,37 +90,50 @@ static void rfs_dcache_entry_free(struct rfs_dcache_entry *entry)
 }
 
 static int rfs_dcache_get_subs_atomic(struct dentry *dir,
-		struct list_head *sibs)
+		struct list_head *sibs, unsigned int *count)
 {
 	struct rfs_dcache_entry *sib;
 	struct dentry *dentry;
 	int rv = 0;
+	unsigned int num_children = 0;
 
 	rfs_dcache_lock(dir);
 
 	rfs_for_each_d_child(dentry, &dir->d_subdirs) {
 
-		sib = rfs_dcache_entry_alloc_locked(dentry, sibs);
-		if (IS_ERR(sib)) {
-			rv = PTR_ERR(sib);
-			break;
+		num_children++;
+		if (!rv) {
+			sib = rfs_dcache_entry_alloc_locked(dentry, sibs);
+			if (IS_ERR(sib)) {
+				rv = PTR_ERR(sib);
+			}
 		}
 	}
 
 	rfs_dcache_unlock(dir);
+	*count = num_children;
 
 	return rv;
 }
 
 static int rfs_dcache_get_subs_kernel(struct dentry *dir,
-		struct list_head *sibs)
+		struct list_head *sibs, unsigned int count)
 {
 	LIST_HEAD(pool);
-	int pool_size = 32;
+	/* Start with a pool_size of 32. If count >= 32, start with a pool_size of
+	 * count+32. This is done to minimize the number of times the pool is grown,
+	 * while keeping the original starting size of 32 when count is small. */
+	unsigned int pool_size = 32;
 	int pool_small;
 	struct rfs_dcache_entry *sib;
 	struct dentry *dentry;
-	int i;
+	unsigned int i;
+
+	if (count > UINT_MAX-pool_size) {
+		pool_size = UINT_MAX;
+	} else if (count >= pool_size) {
+		pool_size += count;
+	}
 
 again:
 	pool_small = 0;
@@ -152,7 +165,13 @@ again:
 
 	if (pool_small) {
 		rfs_dcache_entry_free_list(sibs);
-		pool_size *= 2;
+		if (pool_size == UINT_MAX) {
+			return PTR_ERR(-ENOMEM);
+		} else if (pool_size < UINT_MAX/2) {
+			pool_size *= 2;
+		} else {
+			pool_size = UINT_MAX;
+		}
 		goto again;
 	}
 
@@ -162,14 +181,15 @@ again:
 int rfs_dcache_get_subs(struct dentry *dir, struct list_head *sibs)
 {
 	int rv;
+	unsigned int count;
 
-	rv = rfs_dcache_get_subs_atomic(dir, sibs);
+	rv = rfs_dcache_get_subs_atomic(dir, sibs, &count);
 	if (!rv)
 		return rv;
 
 	rfs_dcache_entry_free_list(sibs);
 	
-	rv = rfs_dcache_get_subs_kernel(dir, sibs);
+	rv = rfs_dcache_get_subs_kernel(dir, sibs, count);
 
 	return rv;
 }
